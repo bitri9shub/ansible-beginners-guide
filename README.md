@@ -494,77 +494,77 @@ we can use VS code IDE to write and validate YML files.
 
 ## Ansible Facts
 
-* **Facts** are informations that Ansible **collects automatically** about every managed host, BEFORE running any task in the playbook.
+* **Facts** are information that Ansible **collects automatically** about every managed host, BEFORE running any task in the playbook.
 
-* Exemple d'informations collectées : l'OS de la machine, sa version, son architecture CPU (x86_64, arm64...), ses interfaces réseau, sa RAM totale, ses disques, son hostname, etc.
+* Examples of collected information: the machine's OS, its version, its CPU architecture (x86_64, arm64...), its network interfaces, its total RAM, its disks, its hostname, etc.
 
-* Ansible collecte ces facts via un module spécial appelé `setup`, exécuté automatiquement au début de chaque playbook (sauf si on le désactive).
+* Ansible collects these facts via a special module called `setup`, which is executed automatically at the beginning of each playbook (unless disabled).
 
-### Pourquoi les Facts sont importants
+### Why Facts Are Important
 
-Sans facts, il faudrait **hardcoder** des valeurs différentes selon l'OS cible (Ubuntu vs Debian vs CentOS), l'architecture (x86_64 vs arm64), etc. Avec les facts, le playbook devient **dynamique et portable** : un seul et même playbook fonctionne sur n'importe quelle machine.
+Without facts, you would need to **hardcode** different values depending on the target OS (Ubuntu vs Debian vs CentOS), the architecture (x86_64 vs arm64), etc. With facts, the playbook becomes **dynamic and portable**: a single playbook works on any machine.
 
-C'est le principe utilisé plus loin dans l'exemple réel de rôle `docker` :
+This is the principle used later in the real-world `docker` role example:
 ```yaml
 url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
 ```
-Ici, Ansible détecte automatiquement si la machine est "Ubuntu" ou "Debian", et adapte l'URL en conséquence — sans aucune valeur en dur.
+Here, Ansible automatically detects whether the machine is "Ubuntu" or "Debian", and adapts the URL accordingly — without any hardcoded values.
 
-### Voir les facts d'une machine
+### Viewing a Machine's Facts
 
 ```
 ansible <host> -m setup
 ```
 
-Cette commande retourne un GROS bloc JSON contenant des centaines de variables. Pour filtrer et n'afficher que ce qui nous intéresse :
+This command returns a LARGE JSON block containing hundreds of variables. To filter and display only what we're interested in:
 ```
 ansible <host> -m setup -a "filter=ansible_distribution*"
 ```
 
-### Facts les plus utilisés en pratique
+### Most Commonly Used Facts in Practice
 
-| Fact | Exemple de valeur | Usage typique |
+| Fact | Example Value | Typical Usage |
 |---|---|---|
-| `ansible_facts['distribution']` | `Ubuntu` | choisir le repo/paquet correct |
-| `ansible_facts['distribution_release']` | `jammy`, `bookworm` | construire l'URL du repo apt |
-| `ansible_facts['distribution_version']` | `22.04` | conditions `when` selon la version OS |
-| `ansible_facts['architecture']` | `x86_64`, `aarch64` | choisir le bon binaire à télécharger |
-| `ansible_facts['os_family']` | `Debian`, `RedHat` | choisir `apt` vs `yum` dans une tâche générique |
-| `ansible_facts['hostname']` | `web01` | affichage, logs, templates |
-| `ansible_facts['default_ipv4']['address']` | `192.168.56.10` | config réseau dynamique |
-| `ansible_facts['memtotal_mb']` | `2048` | dimensionner des paramètres selon la RAM |
-| `ansible_user` | `ansible` | pas un "fact" au sens strict mais une variable magique très utilisée — l'utilisateur SSH courant |
+| `ansible_facts['distribution']` | `Ubuntu` | choose the correct repo/package |
+| `ansible_facts['distribution_release']` | `jammy`, `bookworm` | build the apt repo URL |
+| `ansible_facts['distribution_version']` | `22.04` | `when` conditions based on the OS version |
+| `ansible_facts['architecture']` | `x86_64`, `aarch64` | choose the correct binary to download |
+| `ansible_facts['os_family']` | `Debian`, `RedHat` | choose `apt` vs `yum` in a generic task |
+| `ansible_facts['hostname']` | `web01` | display, logs, templates |
+| `ansible_facts['default_ipv4']['address']` | `192.168.56.10` | dynamic network configuration |
+| `ansible_facts['memtotal_mb']` | `2048` | size parameters based on RAM |
+| `ansible_user` | `ansible` | not a "fact" in the strict sense but a widely used magic variable — the current SSH user |
 
-Note : `ansible_facts['distribution']` est la syntaxe moderne (recommandée). L'ancienne syntaxe `ansible_distribution` (sans le dictionnaire) fonctionne encore mais est dépréciée.
+Note: `ansible_facts['distribution']` is the modern (recommended) syntax. The old syntax `ansible_distribution` (without the dictionary) still works but is deprecated.
 
-### Exemple : rendre une tâche multi-OS grâce aux Facts
+### Example: Making a Task Multi-OS Using Facts
 
 ```yaml
-- name: Installer sur Debian/Ubuntu
+- name: Install on Debian/Ubuntu
   ansible.builtin.apt:
     name: docker-ce
     state: present
   when: ansible_facts['os_family'] == "Debian"
 
-- name: Installer sur RedHat/CentOS
+- name: Install on RedHat/CentOS
   ansible.builtin.yum:
     name: docker-ce
     state: present
   when: ansible_facts['os_family'] == "RedHat"
 ```
 
-### Facts personnalisés (`set_fact`)
+### Custom Facts (`set_fact`)
 
-On peut aussi définir ses propres "facts" en cours de playbook avec le module `set_fact`, utile pour stocker un résultat intermédiaire et le réutiliser plus loin :
+You can also define your own "facts" during a playbook run using the `set_fact` module, which is useful for storing an intermediate result and reusing it later:
 ```yaml
-- name: Calculer une valeur et la stocker
+- name: Calculate a value and store it
   ansible.builtin.set_fact:
     my_custom_port: "{{ 8080 if env == 'prod' else 8081 }}"
 ```
 
-### Désactiver la collecte des Facts (performance)
+### Disabling Fact Collection (Performance)
 
-Si un playbook n'a besoin d'aucun fact (rare), on peut désactiver la collecte pour gagner du temps d'exécution :
+If a playbook doesn't need any facts (rare), you can disable fact collection to save execution time:
 ```yaml
 - hosts: all
   gather_facts: false
@@ -572,29 +572,29 @@ Si un playbook n'a besoin d'aucun fact (rare), on peut désactiver la collecte p
 
 ## Ansible Modules
 
-* Un **module** est une unité de code (généralement en Python) qu'Ansible **envoie et exécute** sur le host cible pour accomplir UNE action précise : installer un paquet, copier un fichier, gérer un service, créer un utilisateur, etc.
+* A **module** is a unit of code (usually written in Python) that Ansible **sends and executes** on the target host to accomplish ONE specific action: install a package, copy a file, manage a service, create a user, etc.
 
-* Chaque ligne sous `tasks:` dans un playbook correspond à l'appel d'un module avec ses paramètres.
+* Each line under `tasks:` in a playbook corresponds to a module call with its parameters.
 
-* Comme vu plus haut : après exécution, le module est supprimé du host managé (aucun résidu ne reste sur la machine cible).
+* As mentioned above: after execution, the module is removed from the managed host (no residue is left on the target machine).
 
-### Anatomie d'un appel de module
+### Anatomy of a Module Call
 
 ```yaml
-- name: Installer Docker
-  ansible.builtin.apt:        # <- le module
-    name: docker-ce           # <- paramètre 1
-    state: present            # <- paramètre 2
-    update_cache: true        # <- paramètre 3
+- name: Install Docker
+  ansible.builtin.apt:        # <- the module
+    name: docker-ce           # <- parameter 1
+    state: present            # <- parameter 2
+    update_cache: true        # <- parameter 3
 ```
 
-* `ansible.builtin.apt` est le FQCN (Fully Qualified Collection Name), au format `<namespace>.<collection>.<module>`. C'est la syntaxe recommandée en Ansible moderne (comme on le verra dans l'exemple réel plus bas), à la place de simplement `apt`.
+* `ansible.builtin.apt` is the FQCN (Fully Qualified Collection Name), in the format `<namespace>.<collection>.<module>`. This is the recommended syntax in modern Ansible (as we'll see in the real-world example below), instead of simply `apt`.
 
-* Chaque module a sa propre liste de paramètres, documentée officiellement.
+* Each module has its own list of parameters, documented officially.
 
-### Catégories de modules essentiels (le "80% du travail")
+### Essential Module Categories (the "80% of the Work")
 
-**Gestion de paquets**
+**Package Management**
 ```yaml
 ansible.builtin.apt:      # Debian/Ubuntu
   name: nginx
@@ -604,61 +604,61 @@ ansible.builtin.yum:      # RedHat/CentOS
   name: nginx
   state: present
 
-ansible.builtin.package:  # générique, détecte automatiquement le gestionnaire de paquets
+ansible.builtin.package:  # generic, automatically detects the package manager
   name: nginx
   state: present
 ```
 
-**Gestion de services**
+**Service Management**
 ```yaml
-ansible.builtin.service:   # générique (systemd, sysvinit...)
+ansible.builtin.service:   # generic (systemd, sysvinit...)
   name: nginx
   state: started            # started | stopped | restarted | reloaded
-  enabled: true              # démarrage automatique au boot
+  enabled: true              # automatic start at boot
 
-ansible.builtin.systemd:   # spécifique à systemd, plus de contrôle
+ansible.builtin.systemd:   # specific to systemd, more control
   name: docker
   state: restarted
   enabled: true
   daemon_reload: true
 ```
 
-**Copie / fichiers / templates**
+**Copy / Files / Templates**
 ```yaml
-ansible.builtin.copy:      # copie un fichier statique (ou du contenu inline)
-  src: fichier_local.conf
-  dest: /etc/app/fichier.conf
+ansible.builtin.copy:      # copy a static file (or inline content)
+  src: local_file.conf
+  dest: /etc/app/file.conf
   mode: "0644"
 
-ansible.builtin.template:  # copie un fichier Jinja2 (.j2), avec variables substituées
+ansible.builtin.template:  # copy a Jinja2 file (.j2), with variables substituted
   src: nginx.conf.j2
   dest: /etc/nginx/nginx.conf
   notify: restart nginx
 
-ansible.builtin.file:      # créer/supprimer dossiers, fichiers vides, liens symboliques, permissions
+ansible.builtin.file:      # create/delete directories, empty files, symbolic links, permissions
   path: /opt/myapp
   state: directory          # directory | file | absent | link | touch
   mode: "0755"
   owner: ansible
   group: ansible
 
-ansible.builtin.lineinfile:  # ajouter/modifier UNE ligne dans un fichier existant sans tout réécrire
+ansible.builtin.lineinfile:  # add/modify ONE line in an existing file without rewriting it entirely
   path: /etc/hosts
   line: "192.168.56.10 web01"
   state: present
 
-ansible.builtin.get_url:   # télécharger un fichier depuis une URL
-  url: "https://exemple.com/fichier"
-  dest: /usr/local/bin/fichier
+ansible.builtin.get_url:   # download a file from a URL
+  url: "https://example.com/file"
+  dest: /usr/local/bin/file
   mode: "0755"
 ```
 
-**Gestion des utilisateurs et groupes**
+**User and Group Management**
 ```yaml
 ansible.builtin.user:
   name: ansible
   groups: docker
-  append: true               # IMPORTANT : sans ça, écrase les autres groupes de l'utilisateur
+  append: true               # IMPORTANT: without this, it overwrites the user's other groups
   state: present
   shell: /bin/bash
 
@@ -667,72 +667,72 @@ ansible.builtin.group:
   state: present
 ```
 
-**Exécution de commandes arbitraires**
+**Running Arbitrary Commands**
 ```yaml
-ansible.builtin.command:   # exécute une commande, PAS de shell (pas de pipe, pas de &&, pas de variables shell)
+ansible.builtin.command:   # runs a command, NOT through a shell (no pipes, no &&, no shell variables)
   cmd: "systemctl status docker"
 
-ansible.builtin.shell:     # comme command, mais passe par un vrai shell (pipes, &&, redirections OK)
+ansible.builtin.shell:     # like command, but runs through a real shell (pipes, &&, redirections OK)
   cmd: "docker ps | grep nginx"
 
-ansible.builtin.raw:       # exécute une commande brute SANS passer par Python sur le host
-                             # utile uniquement quand Python n'est pas encore installé sur la cible
+ansible.builtin.raw:       # runs a raw command WITHOUT going through Python on the host
+                             # useful only when Python is not yet installed on the target
 ```
-⚠️ Règle importante : toujours préférer un module dédié (`apt`, `service`, `copy`...) à `command`/`shell` quand il existe, car les modules dédiés sont **idempotents** (ils vérifient l'état actuel avant d'agir), alors que `command`/`shell` s'exécutent à chaque run, que ce soit nécessaire ou non.
+⚠️ Important rule: always prefer a dedicated module (`apt`, `service`, `copy`...) over `command`/`shell` when one exists, because dedicated modules are **idempotent** (they check the current state before acting), whereas `command`/`shell` run on every execution, whether necessary or not.
 
-**Modules spécifiques Docker** (utilisés massivement dans un contexte DevOps)
+**Docker-Specific Modules** (heavily used in a DevOps context)
 ```yaml
-community.docker.docker_container:  # créer/gérer un conteneur
+community.docker.docker_container:  # create/manage a container
   name: jenkins
   image: jenkins/jenkins:lts
   state: started
   ports:
     - "8080:8080"
 
-community.docker.docker_image:      # gérer une image (pull, build)
+community.docker.docker_image:      # manage an image (pull, build)
   name: myapp
   source: pull
 ```
-Note : ces modules Docker ne font PAS partie de `ansible.builtin` — ils viennent de la collection `community.docker`, à installer séparément avec `ansible-galaxy collection install community.docker`. C'est pour cette raison que le rôle `docker` de l'exemple réel (Task 6 plus bas) installe le SDK Python `docker` : ces modules `docker_*` en ont besoin pour fonctionner sur le host cible.
+Note: these Docker modules are NOT part of `ansible.builtin` — they come from the `community.docker` collection, which must be installed separately with `ansible-galaxy collection install community.docker`. This is the reason why the `docker` role in the real-world example (Task 6 below) installs the Python SDK `docker`: these `docker_*` modules need it to function on the target host.
 
-**Modules réseau/repo** (utilisés dans l'exemple réel plus bas)
+**Network/Repo Modules** (used in the real-world example below)
 ```yaml
-ansible.builtin.apt_key:        # ajouter une clé GPG
-ansible.builtin.apt_repository: # ajouter un repo apt
+ansible.builtin.apt_key:        # add a GPG key
+ansible.builtin.apt_repository: # add an apt repository
 ```
 
-**Modules de contrôle de flux** (pas des "actions" à proprement parler, mais indispensables)
+**Flow Control Modules** (not "actions" per se, but essential)
 ```yaml
-ansible.builtin.debug:      # afficher une variable/message pendant l'exécution (débogage)
+ansible.builtin.debug:      # display a variable/message during execution (debugging)
   var: ansible_facts['distribution']
 
-ansible.builtin.wait_for:   # attendre qu'un port/fichier/condition soit disponible (ex: attendre que Jenkins soit up avant de continuer)
+ansible.builtin.wait_for:   # wait for a port/file/condition to become available (e.g., wait for Jenkins to be up before continuing)
   port: 8080
   delay: 5
   timeout: 60
 
-ansible.builtin.fail:       # arrêter le playbook avec un message d'erreur si une condition est vraie
-  msg: "Variable requise manquante"
+ansible.builtin.fail:       # stop the playbook with an error message if a condition is true
+  msg: "Required variable missing"
   when: my_var is not defined
 ```
 
-### Comment trouver la documentation d'un module
+### How to Find a Module's Documentation
 
 ```
 ansible-doc ansible.builtin.apt
 ```
-Affiche directement dans le terminal tous les paramètres possibles du module, avec des exemples. Réflexe à avoir dès qu'on découvre un nouveau module — plus fiable que de chercher sur internet, car ça reflète exactement la version d'Ansible installée localement.
+This displays directly in the terminal all the possible parameters of the module, with examples. This should be your reflex whenever you discover a new module — more reliable than searching the internet, because it reflects exactly the version of Ansible installed locally.
 
-### Résumé — Modules vs Facts
+### Summary — Modules vs Facts
 
 | | Facts | Modules |
 |---|---|---|
-| Rôle | Lire l'état / les infos de la machine | Agir sur la machine |
-| Quand | Collectés automatiquement au début du play | Appelés à chaque tâche |
-| Exemple | `ansible_facts['distribution']` | `ansible.builtin.apt` |
-| Analogie | Les "capteurs" | Les "actionneurs" |
+| Role | Read the state / information of the machine | Act on the machine |
+| When | Collected automatically at the beginning of the play | Called on each task |
+| Example | `ansible_facts['distribution']` | `ansible.builtin.apt` |
+| Analogy | The "sensors" | The "actuators" |
 
-Ensemble, Facts + Modules sont ce qui rend un playbook **dynamique** (s'adapte à la cible via les facts) et **idempotent** (agit intelligemment via les modules dédiés plutôt que via des commandes brutes).
+Together, Facts + Modules are what makes a playbook **dynamic** (adapts to the target via facts) and **idempotent** (acts intelligently via dedicated modules rather than raw commands).
 
 ## PlayBooks :
 
