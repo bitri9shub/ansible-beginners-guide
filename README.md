@@ -745,3 +745,164 @@ docker_compose_version: "2.24.0"
 | `vars/main.yml` | High priority, fixed variables |
 | `meta/main.yml` | Role info + role dependencies |
 | `roles:` in playbook | How you call one or many roles on a group of hosts |
+
+## An Example From an Existing Project
+
+* Till now we saw the theory + a simple example. Now let's take a REAL `docker` role taken from an actual project (homelab) and decortiquate it file by file, task by task. This will help you connect theory with real world usage.
+
+* This role's job : Install Docker Engine + Docker Compose + Python Docker SDK on a machine, configure it to talk to a private insecure registry, and make sure a non-root user can use docker.
+
+### File : `defaults/main.yml`
+
+```
+---
+docker_compose_version: "latest"
+```
+
+* Here, `docker_compose_version` is a LOW priority variable (remember - `defaults/` = easily overridden). By default it's set to `"latest"`, but Playbook or Inventory can override this value to pin a specific version, Example: `docker_compose_version: "v2.24.0"`.
+
+* This is exactly the "Rule of thumb" we saw before - version numbers are something the USER of this role might want to change, so it belongs in `defaults/`, not `vars/`.
+
+### File : `handlers/main.yml`
+
+```
+---
+- name: restart docker
+  ansible.builtin.service:
+    name: docker
+    state: restarted
+    enabled: true
+```
+
+* Same concept as before, this handler will restart the `docker` service, but ONLY when it gets called using `notify`.
+
+* Note : Here they used `ansible.builtin.service` module (Fully Qualified Collection Name - FQCN), instead of just `service`. In newer Ansible versions, its recommended to use FQCN (`ansible.builtin.xxx`) to avoid confusion with community modules of the same name.
+
+### File : `tasks/main.yml` - breaking it down task by task
+
+* At the top, you will see comments starting with `#`. This is a good practice, always document WHAT the role does and WHY, especially for tricky parts (like the insecure registry task below).
+
+```
+# Role: docker
+# Installs Docker Engine + Compose plugin + Python SDK (for docker_* modules
+# and the docker compose play in other roles).
+```
+
+**Task 1 - Add Docker's GPG key**
+```
+- name: Ensure Docker GPG key is present
+  ansible.builtin.apt_key:
+    url: "https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }}/gpg"
+    state: present
+```
+* `ansible_facts['distribution']` is an Ansible FACT (auto-detected info about the target machine, Example: Ubuntu, Debian). `| lower` is a Jinja2 FILTER that converts it to lowercase, because Docker's URL needs it in lowercase (`ubuntu`, not `Ubuntu`).
+* This makes the task DYNAMIC - same task works whether the machine is Ubuntu or Debian, no hardcoding needed.
+
+**Task 2 - Add the Docker apt repository**
+```
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch={{ ansible_facts['architecture'] }}] https://download.docker.com/linux/{{ ansible_facts['distribution'] | lower }} {{ ansible_facts['distribution_release'] }} stable"
+    state: present
+    update_cache: true
+```
+* Three facts used here - `architecture` (Example: x86_64), `distribution` (lowercased), `distribution_release` (Example: jammy, bookworm). Again, fully dynamic, no hardcoded OS name/version.
+
+**Task 3 - Install Docker Engine and CLI**
+```
+- name: Install Docker Engine and CLI
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+```
+* Standard package installation, same concept we already saw, just with a bigger package list (this time using `apt` module directly with a list of packages).
+
+**Task 4 & 5 - Install docker-compose binary (pinned vs latest)**
+```
+- name: Install docker compose binary (pinned version)
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-linux-{{ ansible_facts['architecture'] }}"
+    dest: /usr/local/bin/docker-compose
+    mode: "0755"
+  when: ansible_facts['architecture'] == "x86_64" and docker_compose_version != "latest"
+
+- name: Install docker compose binary (latest)
+  ansible.builtin.get_url:
+    url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{{ ansible_facts['architecture'] }}"
+    dest: /usr/local/bin/docker-compose
+    mode: "0755"
+  when: ansible_facts['architecture'] == "x86_64" and docker_compose_version == "latest"
+```
+* This is where `defaults/main.yml`'s `docker_compose_version` variable gets USED. Notice the two tasks are mutually exclusive using `when:` (conditional execution) :
+    - Task 4 runs ONLY IF the user pinned a specific version (`!= "latest"`)
+    - Task 5 runs ONLY IF the user left it as `"latest"` (default)
+* `get_url` module downloads a file from internet straight to the target machine, `mode: "0755"` makes it executable (rwxr-xr-x).
+* This shows how ONE variable (`docker_compose_version`) can control the behaviour/flow of multiple tasks. That's the whole point of putting it in `defaults/` instead of hardcoding it.
+
+**Task 6 - Install Python Docker SDK**
+```
+- name: Install Python Docker SDK (for docker_* modules)
+  ansible.builtin.pip:
+    name:
+      - docker
+      - docker-compose
+    state: present
+```
+* Some Ansible modules like `docker_container`, `docker_image` (the `docker_*` modules mentioned in the comment) need the Python `docker` library installed on the TARGET machine to work. This task installs it via `pip` module.
+
+**Task 7 - Configure insecure registry**
+```
+# The private registry runs plain HTTP (no TLS) for this homelab, so the
+# docker daemon on every host must explicitly allow it as insecure —
+# otherwise docker login/push/pull will be rejected on a 192.168.x host.
+- name: Configure docker daemon for the insecure registry
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "insecure-registries": ["{{ instance_registry_fqdn }}:{{ registry_port }}"]
+      }
+  notify: restart docker
+```
+* This is the most important task to understand, and this is exactly WHY comments matter - without that comment, you wouldn't know why this task even exists.
+* `ansible.builtin.copy` with `content:` (instead of `src:`) lets you write file content DIRECTLY inside the task, no need for a separate template file.
+* `instance_registry_fqdn` and `registry_port` are variables coming from OUTSIDE this role (probably from your `group_vars` or `vms.yml`, since they're not defined in this role's `defaults/` or `vars/`). This is normal - a role can use variables defined anywhere in your Ansible project, not only its own `defaults/`/`vars/`.
+* `notify: restart docker` - This is the link back to `handlers/main.yml`. If this file's content CHANGES (Ansible's `copy` module is idempotent, it only reports "changed" if the content is actually different from what's already there), then and ONLY then the `restart docker` handler gets triggered at the end of the play.
+
+**Task 8 - Add user to docker group**
+```
+- name: Ensure vagrant user can use docker
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+```
+* `ansible_user` is another Ansible fact/variable - the SSH user Ansible is connecting with. `append: true` is CRITICAL here - without it, `groups: docker` would REMOVE the user from all its other groups and put it ONLY in `docker` group. `append: true` means "ADD to docker group, keep existing groups too".
+
+**Task 9 - Start and enable docker**
+```
+- name: Start and enable docker
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+```
+* `state: started` makes sure docker is running NOW. `enabled: true` makes sure docker starts automatically on every future boot. Note the difference with the handler - the handler does `state: restarted` (used when config CHANGED and needs a restart), this task does `state: started` (used at first install/every run, just to make sure it's up).
+
+### What This Example Teaches You
+
+| Concept from theory | Where it's used in this real role |
+|---|---|
+| `defaults/main.yml` = overridable variable | `docker_compose_version` |
+| `notify` + handler | Task 7 (`daemon.json` change) triggers `restart docker` handler |
+| Ansible Facts | `ansible_facts['distribution']`, `['architecture']`, `['distribution_release']` |
+| Jinja2 Filters | `| lower` |
+| `when:` conditional | Tasks 4 & 5, mutually exclusive on `docker_compose_version` |
+| Variables from outside the role | `instance_registry_fqdn`, `registry_port`, `ansible_user` |
+| Idempotence | `copy` module only reports change (and notifies) if content actually differs |
+| Comments as documentation | Explaining WHY the insecure registry task exists |
