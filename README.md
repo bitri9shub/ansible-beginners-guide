@@ -592,7 +592,7 @@ If a playbook doesn't need any facts (rare), you can disable fact collection to 
 
 * Each module has its own list of parameters, documented officially.
 
-### Essential Module Categories (the "80% of the Work")
+### Essential Module Categories
 
 **Package Management**
 ```yaml
