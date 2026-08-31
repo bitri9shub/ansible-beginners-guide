@@ -572,7 +572,7 @@ If a playbook doesn't need any facts (rare), you can disable fact collection to 
 
 ## Ansible Modules
 
-* A **module** is a unit of code (usually written in Python) that Ansible **sends and executes** on the target host to accomplish ONE specific action: install a package, copy a file, manage a service, create a user, etc.
+* A **module** is a unit of code that Ansible **sends and executes** on the target host to accomplish ONE specific action: install a package, copy a file, manage a service, create a user, etc.
 
 * Each line under `tasks:` in a playbook corresponds to a module call with its parameters.
 
