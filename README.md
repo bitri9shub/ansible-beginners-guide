@@ -1015,7 +1015,7 @@ docker_compose_version: "2.24.0"
 
 ## An Example From an Existing Project
 
-* Till now we saw the theory + a simple example. Now let's take a REAL `docker` role taken from an actual project (homelab) and decortiquate it file by file, task by task. This will help you connect theory with real world usage.
+* Till now we saw the theory + a simple example. Now let's take a REAL `docker` role taken from an actual project and break it down file by file, task by task. This will help you connect theory with real world usage.
 
 * This role's job : Install Docker Engine + Docker Compose + Python Docker SDK on a machine, configure it to talk to a private insecure registry, and make sure a non-root user can use docker.
 
@@ -1124,7 +1124,7 @@ docker_compose_version: "latest"
 
 **Task 7 - Configure insecure registry**
 ```
-# The private registry runs plain HTTP (no TLS) for this homelab, so the
+# The private registry runs plain HTTP (no TLS) for this setup, so the
 # docker daemon on every host must explicitly allow it as insecure —
 # otherwise docker login/push/pull will be rejected on a 192.168.x host.
 - name: Configure docker daemon for the insecure registry
