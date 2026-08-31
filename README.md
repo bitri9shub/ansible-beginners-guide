@@ -1017,7 +1017,7 @@ docker_compose_version: "2.24.0"
 
 * Till now we saw the theory + a simple example. Now let's take a REAL `docker` role taken from an actual project and break it down file by file, task by task. This will help you connect theory with real world usage.
 
-* This role's job : Install Docker Engine + Docker Compose + Python Docker SDK on a machine, configure it to talk to a private insecure registry, and make sure a non-root user can use docker.
+* This role's job : Install Docker Engine + Docker Compose + Python Docker SDK on a machine, optionally configure it to talk to a private insecure registry, and make sure a non-root user can use docker.
 
 ### File : `defaults/main.yml`
 
@@ -1124,26 +1124,26 @@ docker_compose_version: "latest"
 
 **Task 7 - Configure insecure registry**
 ```
-# The private registry runs plain HTTP (no TLS) for this setup, so the
-# docker daemon on every host must explicitly allow it as insecure —
-# otherwise docker login/push/pull will be rejected on a 192.168.x host.
+# If you run a private registry over plain HTTP (no TLS), the docker
+# daemon on every host must explicitly allow it as insecure —
+# otherwise docker login/push/pull will be rejected.
 - name: Configure docker daemon for the insecure registry
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
     content: |
       {
-        "insecure-registries": ["{{ instance_registry_fqdn }}:{{ registry_port }}"]
+        "insecure-registries": ["{{ registry_host }}:{{ registry_port }}"]
       }
   notify: restart docker
 ```
 * This is the most important task to understand, and this is exactly WHY comments matter - without that comment, you wouldn't know why this task even exists.
 * `ansible.builtin.copy` with `content:` (instead of `src:`) lets you write file content DIRECTLY inside the task, no need for a separate template file.
-* `instance_registry_fqdn` and `registry_port` are variables coming from OUTSIDE this role (probably from your `group_vars` or `vms.yml`, since they're not defined in this role's `defaults/` or `vars/`). This is normal - a role can use variables defined anywhere in your Ansible project, not only its own `defaults/`/`vars/`.
+* `registry_host` and `registry_port` are variables coming from OUTSIDE this role (for example from your inventory, `group_vars/`, or a playbook's `vars:` section, since they're not defined in this role's `defaults/` or `vars/`). This is normal - a role can use variables defined anywhere in your Ansible project, not only its own `defaults/`/`vars/`.
 * `notify: restart docker` - This is the link back to `handlers/main.yml`. If this file's content CHANGES (Ansible's `copy` module is idempotent, it only reports "changed" if the content is actually different from what's already there), then and ONLY then the `restart docker` handler gets triggered at the end of the play.
 
 **Task 8 - Add user to docker group**
 ```
-- name: Ensure vagrant user can use docker
+- name: Ensure current user can use docker
   ansible.builtin.user:
     name: "{{ ansible_user }}"
     groups: docker
@@ -1170,6 +1170,6 @@ docker_compose_version: "latest"
 | Ansible Facts | `ansible_facts['distribution']`, `['architecture']`, `['distribution_release']` |
 | Jinja2 Filters | `| lower` |
 | `when:` conditional | Tasks 4 & 5, mutually exclusive on `docker_compose_version` |
-| Variables from outside the role | `instance_registry_fqdn`, `registry_port`, `ansible_user` |
+| Variables from outside the role | `registry_host`, `registry_port`, `ansible_user` |
 | Idempotence | `copy` module only reports change (and notifies) if content actually differs |
 | Comments as documentation | Explaining WHY the insecure registry task exists |
